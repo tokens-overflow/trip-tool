@@ -1,11 +1,26 @@
-# 🗺️ Maps Deep Research Agent
+# 🧭 trip-tool
 
-> 基于 **LLM 编排 + Google Maps Platform** 的自动化地点深度调研系统
-> 输入一句主题 → 自动拆解任务 DAG → 并发调用 Maps API → 汇总成 Markdown 报告 + 交互地图 + 多日行程
+> 基于 **LLM 编排 + Google Maps Platform** 的旅游深度调研 / 攻略生成工具
+> 输入一句主题 → 自动拆解任务 DAG → 并发调用 Maps API → 汇总成深度报告 + **可执行时间线行程**
+>
+> 前端不内嵌地图：每个地点直接给一个可点击的 Google 地图外链，更轻、更省 key。
 
 ---
 
-## 一、系统架构
+## 一、它能做什么
+
+输入「东京涉谷 3 日游」+（可选）出行时间、预算，约 1–2 分钟后得到：
+
+- **佳处**：候选地点卡片，含评分 / 价位 / 评论数 / 营业时间 / 官方简介 / **真实评价**，按质量分（评分 × log(1+评论数)）排序，每个都能一键跳 Google 地图；
+- **行程**：按**时间线**编排的攻略——时刻 / 时长 / 品类 / **门票** / 营业提醒 / 到下一站交通 / 避坑，外加**当天天气**与注意事项；
+- **手记**：结构化深度报告——概览 · 地点详览 · 分类对比表 · 行程时间线 · **预算估算** · 天气与时令 · 避坑提示 · 参考来源；
+- **行迹**：实时工具调用日志（缓存命中 / 耗时 / 返回数量）。
+
+天气走 **wttr.in**（免费、免 key）；行程会结合天气、营业时间、预算给出取舍。
+
+---
+
+## 二、系统架构
 
 ### 1. 顶层数据流
 
@@ -13,7 +28,8 @@
 ┌──────────────────────────────────────────────────────────────────────┐
 │                        前端 Vue 3 + Vite                              │
 │                    http://localhost:5173                              │
-│   表单 ─────► SSE 流 ─────► 任务时间线 │ 地图 │ 报告 │ 行程            │
+│   表单 ─────► SSE 流 ─────► 任务脉络 │ 佳处 │ 行程 │ 手记 │ 行迹       │
+│              （每个地点 = 可点击的 Google 地图外链，无内嵌地图）        │
 └──────────────────────────────┬───────────────────────────────────────┘
                                │  /api  →  vite proxy
                                ▼
@@ -23,7 +39,7 @@
 │   POST /research(/stream)                                            │
 │                ▼                                                     │
 │   ┌────────────────────────────────────────────────────────────┐    │
-│   │                  MapsDeepResearchAgent                     │    │
+│   │                   研究 Agent (facade)                       │    │
 │   │  ┌──────────────────────────────────────────────────────┐  │    │
 │   │  │  Pipeline                                            │  │    │
 │   │  │  ① PlanStage  → ② ExecuteStage → ③ ComposeStage     │  │    │
@@ -33,14 +49,14 @@
 │   每个 Stage 用到的零件：                                              │
 │       PlanStage    →  PlanTask (LLM)                                 │
 │       ExecuteStage →  DAGScheduler + ToolRunner + SummarizeTask      │
-│       ComposeStage →  ReportTask + ItineraryTask (并行)              │
+│       ComposeStage →  ReportTask + ItineraryTask (并行) + 天气        │
 └────────────────────────┬─────────────────────────────────────────────┘
                          │
-        ┌────────────────┼────────────────────────┐
-        ▼                ▼                        ▼
-   Google Maps     LLM Provider             SQLite + LRU 缓存
-   Platform       (Bedrock / Anthropic /     (./.cache/maps/)
-   (4 个 API)      OpenAI / DeepSeek)
+       ┌─────────────────┼──────────────┬──────────────────┐
+       ▼                 ▼              ▼                  ▼
+  Google Maps       LLM Provider     wttr.in          SQLite + LRU 缓存
+  Platform         (DeepSeek /       (天气，免 key)     (./.cache/maps/)
+  (4 个 REST API)   Anthropic / …)
 ```
 
 ### 2. 后端分层（高度解耦）
@@ -61,12 +77,12 @@ backend/src/
 │   ├─ plan_task.py        JsonLLMTask[PlanInput, list[TaskNode]]
 │   ├─ summarize_task.py   StreamingLLMTask[SummarizeInput, str]
 │   ├─ report_task.py      TextLLMTask[ReportInput, str]
-│   └─ itinerary_task.py   JsonLLMTask[ItineraryInput, (days, map)]
+│   └─ itinerary_task.py   JsonLLMTask[ItineraryInput, (days, overview)]
 │
 ├─ 🎬 stages/              ── 3 个 Pipeline Stage（唯一混合 LLM+tool+event）
 │   ├─ plan_stage.py
 │   ├─ execute_stage.py
-│   └─ compose_stage.py
+│   └─ compose_stage.py    报告 + 行程并行；先拉天气 + 拼出行/预算上下文
 │
 ├─ 🔌 llm/                 ── 多 provider 适配
 │   ├─ base.py             LLMClient Protocol + LLMUsage
@@ -76,8 +92,9 @@ backend/src/
 ├─ 🌐 tools/               ── 工具与缓存
 │   ├─ base.py             Tool / ToolRegistry / ToolResult[T]
 │   ├─ cache.py            两级缓存（LRU + sqlite）
+│   ├─ weather.py          wttr.in 天气（免 key，尽力而为，失败不阻塞）
 │   └─ maps/               places / directions / geocoding / distance_matrix
-│       ├─ client.py       async HTTP（5 个端点共用 _get/_post 模板）
+│       ├─ client.py       async HTTP（共用 _get/_post 模板）
 │       └─ results.py      4 个 typed Payload（Pydantic）
 │
 ├─ agent.py                顶层 facade：装配 Pipeline，run / run_stream
@@ -92,7 +109,7 @@ backend/src/
 | 层 | 知道什么 | 不知道什么 |
 |---|---|---|
 | `core/` | 什么都不知道 | 业务、地图、LLM、HTTP |
-| `tools/` | HTTP、Maps API、缓存 | LLM、Pipeline、Stage |
+| `tools/` | HTTP、Maps API、天气、缓存 | LLM、Pipeline、Stage |
 | `llm/` | LLM 协议、provider | 业务、prompt、工具 |
 | `llm_tasks/` | 单个 LLM 用例（prompt + parse） | Pipeline、其它任务、工具 |
 | `execution/` | DAG 调度、工具注册表 | LLM、事件分发 |
@@ -106,58 +123,55 @@ backend/src/
 ```
    ┌────────── PlanStage ──────────┐  ┌──────── ExecuteStage ────────┐  ┌─── ComposeStage ───┐
    │                               │  │                              │  │                    │
-   │  PlanTask (chat_json)         │  │  for each task in DAG:       │  │  ReportTask        │
-   │     ↓                         │  │    prepare_args()            │  │     ↕ (并行)        │
-   │  validate + topo + 兜底       │  │    execute() → ToolResult    │  │  ItineraryTask     │
-   │     ↓                         │  │    SummarizeTask.stream() ──►  │     ↓              │
-   │  state.tasks = [...]          │  │    state.tasks[*].evidence   │  │  state.report_md   │
-   │                               │  │                              │  │  state.itinerary   │
-   │  emit(plan_ready)             │  │  emit(task_update × N)       │  │  state.map_overview│
-   │                               │  │  emit(summary_chunk × M)     │  │  emit(report)      │
-   │                               │  │                              │  │  emit(usage)       │
+   │  PlanTask (chat_json)         │  │  for each task in DAG:       │  │  拉天气 + 出行/预算  │
+   │     ↓                         │  │    prepare_args()            │  │     ↓              │
+   │  validate + topo + 兜底       │  │    execute() → ToolResult    │  │  ReportTask ↕ 并行  │
+   │     ↓                         │  │    SummarizeTask.stream() ──►  │  ItineraryTask     │
+   │  state.tasks = [...]          │  │    state.tasks[*].evidence   │  │     ↓              │
+   │  emit(plan_ready)             │  │  emit(task_update × N)       │  │  emit(report)      │
+   │                               │  │  emit(summary_chunk × M)     │  │  emit(usage)       │
    └───────────────────────────────┘  └──────────────────────────────┘  └────────────────────┘
-            ▲ 同时同一条 Pipeline 被 run() 和 run_stream() 共用，差别只在传给 emit 的实现 ▲
+            ▲ 同一条 Pipeline 被 run() 和 run_stream() 共用，差别只在传给 emit 的实现 ▲
 ```
 
 ---
 
-## 二、初次安装设定
+## 三、初次安装设定
 
-### 1. 开通 Google Maps API
+### 1. 开通 Google Maps API（后端用，1 把 key）
 
 在 [console.cloud.google.com](https://console.cloud.google.com) 同一项目下：
 
-1. 「**APIs & Services → Library**」启用 **5 个 API**：
+1. 「**APIs & Services → Library**」启用 **4 个 REST API**：
    - Places API (New)
    - Directions API
    - Geocoding API
    - Distance Matrix API
-   - Maps JavaScript API
 
-2. 「**Credentials → Create credentials → API key**」创建 **2 把 key**：
+   > 前端不再内嵌地图，**无需** Maps JavaScript API，也**不需要前端 Browser key**。
 
-   | 用途 | Application restrictions | API restrictions |
-   |---|---|---|
-   | 后端 Server key | IP addresses（服务器 IP） | 前 4 个 API |
-   | 前端 Browser key | HTTP referrers（`http://localhost:5173/*`） | Maps JavaScript API |
+2. 「**Credentials → Create credentials → API key**」创建 **1 把后端 Server key**，
+   建议 Application restrictions 限到服务器 IP、API restrictions 限到上面 4 个 API。
 
 3. 「**Billing**」绑定计费账户（Google 每月赠送 $200 免费额度）。
 
 ### 2. LLM Provider 凭证
 
-`config.yaml` 内置 5 个 provider，启动时只看 `llm.active` 字段：
+`config.yaml` 的 `llm.providers` 下可放多个 provider，启动时只看 `llm.active` 字段：
 
-| Provider 别名 | type | 模型 | 凭证 |
-|---|---|---|---|
-| `bedrock`（默认） | bedrock | `jp.anthropic.claude-sonnet-4-6` | AWS access key + secret + region |
-| `anthropic` | anthropic | `claude-sonnet-4-20250514` | `${ANTHROPIC_API_KEY}` |
-| `openai` | openai | `gpt-4o` | `${OPENAI_API_KEY}` |
-| `deepseek` / `ds-flash` | deepseek | `deepseek-v4-flash` | `${DEEPSEEK_API_KEY}` |
-| `ds-pro` | deepseek | `deepseek-v4-pro` | `${DEEPSEEK_API_KEY}` |
+| 类型 | 凭证 |
+|---|---|
+| `deepseek`（推荐起步，便宜） | `${DEEPSEEK_API_KEY}` |
+| `anthropic` | `${ANTHROPIC_API_KEY}` |
+| `openai` | `${OPENAI_API_KEY}` |
+| `bedrock` | AWS access key + secret + region |
+
+> ⚠️ Places 字段掩码包含 `reviews` / `editorialSummary`，会把搜索计费提到较高档（Enterprise + Atmosphere）。
+> 想省钱可在 `tools/maps/client.py` 的 `PLACE_FIELD_MASK` 里去掉 `reviews`（或连 `editorialSummary` 一起去掉）。
 
 ### 3. 编辑配置文件
 
-**`backend/config.yaml`**：
+**`backend/config.yaml`**（从 `config.example.yaml` 拷贝；含真实 key，已被 gitignore）：
 
 ```yaml
 llm:
@@ -165,87 +179,78 @@ llm:
   providers:
     deepseek:
       type: deepseek
-      model: deepseek-v4-flash
+      model: deepseek-chat
       api_key: sk-...        # 直填或写 ${DEEPSEEK_API_KEY}
       base_url: https://api.deepseek.com
-    # ... 其它 provider
 
 app:
   maps:
     api_key: AIzaSy...       # ★必填：后端 Server key
-  # 其余字段（端口、并发、缓存、retry…）有默认值，按需调整
+    default_places_limit: 20 # 候选数量等可按需调整
+  # 其余字段（端口、并发、缓存、retry…）有默认值
 ```
 
-**`frontend/.env.local`**（拷贝 `.env.local.example`）：
+**`frontend/.env.local`**（拷贝 `.env.local.example` 即可，**不需要任何 key**）：
 
 ```env
-VITE_GOOGLE_MAPS_JS_KEY=AIzaSy...    # ★必填：前端 Browser key
 VITE_BACKEND_BASE=/api
 ```
 
 ### 4. 安装依赖
 
-项目根目录两选一（**需要 Python 3.10+、Node 18+**）：
+需要 **Python 3.10+、Node 18+**。
 
-- **双击 `setup.bat`**
-- **`.\setup.ps1`**
+```bash
+# 后端
+cd backend
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e .            # 按 active provider 自带 [bedrock]/[anthropic] extra 可选追加
 
-脚本会：检查 Python/Node/npm → 确认 `config.yaml` 存在、若 `.env.local` 缺失则从 `.env.local.example` 拷贝 → `pip install -e .`（自动按 `config.yaml` 里 active provider 决定要不要追加 `[bedrock]` / `[anthropic]` extra）→ `npm install` → 跑一次 config 加载冒烟 → 提示哪个 key 还没填。
+# 前端
+cd ../frontend
+npm install
+```
 
-幂等：重复跑只增量补装，不会破坏现有 venv / node_modules。
+> Windows 用户也可用根目录的 `setup.bat` / `setup.ps1` 一键装好（脚本为 Windows 编写）。
 
 ---
 
-## 三、启动方式
-
-### 一键启动（推荐）
-
-项目根目录两选一：
-
-- **双击 `start.bat`** —— 资源管理器里直接双击
-- **`.\start.ps1`** —— 已经在 PowerShell 里就这么跑
-
-脚本会：先杀掉占用 `:8000` / `:5173` 的旧进程 → 在新窗口里起 backend → 等 `/healthz` 200 → 在新窗口里起 frontend → 等 dev server ready → 自动打开浏览器。
-
-再跑一次会先关旧的再重启，无需手动收尾。停止：关掉两个弹窗即可。
-
-### 手动启动（备选）
+## 四、启动方式
 
 开 **两个终端**：
 
-```powershell
+```bash
 # 终端 A：后端
 cd backend
 python -m src.main
 # → INFO Uvicorn running on http://127.0.0.1:8000
 ```
 
-```powershell
+```bash
 # 终端 B：前端
 cd frontend
 npm run dev
 # → VITE v6.x ready, Local: http://localhost:5173
 ```
 
-浏览器打开 **http://localhost:5173**，填入主题（如「东京涉谷 3 日游」）+ 位置锚点（如「Tokyo, Japan」）→ 点「开始研究」。约 1-2 分钟后任务时间线、地图、行程、Markdown 报告依次渲染完成。
+浏览器打开 **http://localhost:5173**，填入主题（如「东京涉谷 3 日游」），
+可选填**出行时间**（如「6 月下旬」）和**预算**（如「人均 500」）→ 点「开始研究」。
+约 1–2 分钟后，任务脉络、佳处、行程时间线、手记报告依次渲染完成。
+
+> Windows 用户可用 `start.bat` / `start.ps1` 一键起双端并自动开浏览器。
 
 ### 健康检查 / 切换 provider
 
-```powershell
+```bash
 curl http://localhost:8000/healthz
-# {"status":"ok","provider":"deepseek","model":"deepseek-v4-flash","config_path":"...config.yaml"}
+# {"status":"ok","provider":"deepseek","model":"deepseek-chat","config_path":"...config.yaml"}
 ```
 
-改 `backend/config.yaml` 任意字段后双击 `start.bat` 即重启生效。常用切换：
-
-```yaml
-llm:
-  active: ds-pro          # 换 DeepSeek Pro
-```
+改 `backend/config.yaml` 的 `llm.active` 后重启后端即生效。
 
 ---
 
-## 四、云端部署
+## 五、云端部署
 
 ### 1. 两套配置文件的分工
 
@@ -261,7 +266,7 @@ api_key: ${DEEPSEEK_API_KEY}              # 未设环境变量 → 空字符串
 region:  ${AWS_REGION:-ap-northeast-1}    # 未设 → 用 ap-northeast-1（bash 风格）
 ```
 
-### 2. 云端启动方式
+### 2. 云端启动
 
 启动时通过 `CONFIG_PATH` 指向模板，secret 由平台环境变量注入：
 
@@ -269,16 +274,16 @@ region:  ${AWS_REGION:-ap-northeast-1}    # 未设 → 用 ap-northeast-1（bash
 CONFIG_PATH=config.example.yaml python -m src.main
 ```
 
-### 3. 必填环境变量清单
+### 3. 必填环境变量
 
-按你 `LLM_ACTIVE` 选用的 provider 设对应组：
+按 `LLM_ACTIVE` 选用的 provider 设对应组：
 
 | Provider | 必须设的环境变量 |
 |---|---|
 | `bedrock`   | `AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、（可选 `AWS_REGION`） |
 | `anthropic` | `ANTHROPIC_API_KEY` |
 | `openai`    | `OPENAI_API_KEY` |
-| `deepseek` / `ds-flash` / `ds-pro` | `DEEPSEEK_API_KEY` |
+| `deepseek`  | `DEEPSEEK_API_KEY` |
 
 **所有 provider 都必须设**：
 
@@ -289,17 +294,15 @@ CONFIG_PATH=config.example.yaml python -m src.main
 
 可选覆盖：`LLM_ACTIVE` / `HOST` / `PORT` / `LOG_LEVEL` / `CACHE_DIR` 等（见 `config.example.yaml`）。
 
-### 4. 几个平台的部署要点
+### 4. 公网暴露的最低安全要求
 
-| 平台 | 关键配置 |
-|---|---|
-| **Fly.io** | `fly secrets set GOOGLE_MAPS_API_KEY=...` 注入 env；`fly volumes create` 挂到 `CACHE_DIR` 保证缓存不丢；`fly.toml` 设 `[env] CONFIG_PATH = "config.example.yaml"` |
-| **Render** | Dashboard → Environment 加 env vars；Disks 挂载到 `/app/.cache` 并设 `CACHE_DIR=/app/.cache`；Start command 用 `python -m src.main` |
-| **Cloud Run** | `gcloud run deploy --set-env-vars=...`；SQLite 缓存随容器实例销毁，建议把 `CACHE_DIR` 设到 `/tmp` 或换 Memorystore；CPU `--cpu=1` + `--timeout=600` 容纳长请求 |
+* 加简单 token 鉴权：在 FastAPI middleware 校验 `X-API-Token` 头，否则陌生人调一次 `/research` 就是你 $0.1+ 账单；
+* 后端 Server key 在 Cloud Console 限制 IP 到部署平台的出口 IP；
+* CORS 白名单去掉 `localhost`，只留生产域名。
 
-### 5. 公网暴露的最低安全要求
+---
 
-* 加简单 token 鉴权：在 FastAPI middleware 校验 `X-API-Token` 头，否则陌生人调一次 `/research` 就是你 $0.1+ 账单
-* 前端构建用的 `VITE_GOOGLE_MAPS_JS_KEY` 在 Cloud Console 限制 HTTP referrer 到你的真实域名
-* 后端 Server key 在 Cloud Console 限制 IP 到部署平台的出口 IP
-* CORS 白名单去掉 `localhost`，只留生产域名
+## 六、密钥保护
+
+仓库内**不含任何真实密钥**：`backend/config.yaml` 与 `frontend/.env.local` 均被 `.gitignore` 排除，
+仅提交 `config.example.yaml`（`${ENV_VAR}` 占位）与 `.env.local.example` 模板。clone 后自行拷贝并填入即可。
