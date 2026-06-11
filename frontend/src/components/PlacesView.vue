@@ -261,4 +261,9 @@ function stars(rating: number | null): { full: number; half: boolean } {
   color: #fdf6ec;
   text-decoration: none;
 }
+
+@media (max-width: 760px) {
+  .places { height: auto; }
+  .grid { overflow: visible; grid-template-columns: 1fr; }
+}
 </style>

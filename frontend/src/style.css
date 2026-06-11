@@ -355,3 +355,19 @@ textarea.input { resize: vertical; line-height: 1.6; }
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ============================================================
+   手机版：从"固定视口、面板内部滚动"切到"整页自然滚动"
+   ============================================================ */
+@media (max-width: 760px) {
+  html, body, #app {
+    height: auto;
+    min-height: 100%;
+  }
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;          /* 允许整页滚动 */
+  }
+  /* 远山纹理在小屏占比太重，淡化一点 */
+  body::after { height: 30vh; opacity: 0.35; }
+}

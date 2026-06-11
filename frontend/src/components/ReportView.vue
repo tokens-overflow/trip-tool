@@ -5,38 +5,50 @@ import { researchState } from "../stores/research";
 
 const props = defineProps<{ markdown: string }>();
 
-function slugify(s: string, i: number) {
-  return "h-" + i + "-" + s.replace(/[^\w一-龥]+/g, "-").slice(0, 24);
-}
-
 interface Heading {
   level: number;
   text: string;
   id: string;
 }
 
-const headings = computed<Heading[]>(() => {
-  if (!props.markdown) return [];
-  const out: Heading[] = [];
-  let i = 0;
-  for (const line of props.markdown.split("\n")) {
-    const m = /^(#{1,3})\s+(.*)$/.exec(line.trim());
-    if (m) out.push({ level: m[1].length, text: m[2].trim(), id: slugify(m[2].trim(), i++) });
-  }
-  return out;
-});
+function slugBase(s: string): string {
+  return (
+    s
+      .replace(/[*_`~]/g, "")
+      .replace(/[^\w一-龥]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "h"
+  );
+}
 
-const html = computed(() => {
-  if (!props.markdown) return "";
-  let i = 0;
+/**
+ * 单次渲染：同一次 marked 渲染里同时产出 HTML 与目次，标题 id 同源，
+ * 用「文本 slug + 去重序号」生成，保证目次锚点永远能命中正文标题。
+ */
+const rendered = computed<{ html: string; headings: Heading[] }>(() => {
+  if (!props.markdown) return { html: "", headings: [] };
+  const headings: Heading[] = [];
+  const used = new Map<string, number>();
   const renderer = new marked.Renderer();
   renderer.heading = ({ tokens, depth }: any) => {
-    const text = tokens.map((t: any) => t.raw).join("");
-    const id = slugify(text, i++);
-    return `<h${depth} id="${id}">${marked.parseInline(text)}</h${depth}>`;
+    const raw = tokens.map((t: any) => t.raw).join("").trim();
+    const base = slugBase(raw);
+    const n = used.get(base) ?? 0;
+    used.set(base, n + 1);
+    const id = n ? `${base}-${n}` : base;
+    if (depth <= 3) headings.push({ level: depth, text: raw.replace(/[*_`]/g, ""), id });
+    return `<h${depth} id="${id}">${marked.parseInline(raw)}</h${depth}>`;
   };
-  return marked.parse(props.markdown, { gfm: true, breaks: true, renderer });
+  const html = marked.parse(props.markdown, {
+    gfm: true,
+    breaks: true,
+    renderer,
+  }) as string;
+  return { html, headings };
 });
+
+const html = computed(() => rendered.value.html);
+const headings = computed(() => rendered.value.headings);
 
 const copied = ref(false);
 async function copyMd() {
@@ -165,6 +177,7 @@ function jump(id: string) {
   line-height: 1.9;
   color: var(--text-hi);
   padding-bottom: 30px;
+  overflow-wrap: anywhere;   /* 长 URL / 无空格串不撑破容器 */
 }
 .prose :deep(h1),
 .prose :deep(h2),
@@ -223,8 +236,12 @@ function jump(id: string) {
   overflow: auto;
 }
 .prose :deep(pre code) { background: none; border: none; padding: 0; }
+/* 宽表格自身横向滚动，不撑破页面（尤其手机） */
 .prose :deep(table) {
-  width: 100%;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 1em 0;
   font-size: 0.88rem;
@@ -248,8 +265,9 @@ function jump(id: string) {
 }
 .prose :deep(img) { max-width: 100%; border-radius: var(--radius-sm); }
 
-@media (max-width: 720px) {
-  .layout { grid-template-columns: 1fr; }
+@media (max-width: 760px) {
+  .report { height: auto; }
+  .layout { grid-template-columns: 1fr; overflow: visible; }
   .toc { display: none; }
 }
 </style>

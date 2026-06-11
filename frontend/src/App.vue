@@ -328,18 +328,78 @@ function statusMeta(state: RunState) {
   height: 100%;
 }
 
+/* 平板：左栏收窄，仍是固定视口内部滚动 */
 @media (max-width: 920px) {
   .shell {
+    grid-template-columns: 300px 1fr;
+  }
+}
+
+/* 手机：整页自然滚动，单列堆叠 */
+@media (max-width: 760px) {
+  .shell {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto auto;
     height: auto;
     min-height: 100vh;
+    gap: 10px;
+    padding: 10px;
+  }
+  /* 各面板改为随内容生长，由整页滚动承接 */
+  .rail,
+  .stage {
+    overflow: visible;
   }
   .rail {
     max-height: none;
   }
-  .stage {
-    min-height: 70vh;
+  .stage-body {
+    height: auto;
+    overflow: visible;
+    padding: 14px;
+  }
+  .stage-body > * {
+    height: auto;
+  }
+
+  /* 顶栏换行、状态行独占一行 */
+  .topbar {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .brand-txt h1 {
+    font-size: 1.25rem;
+  }
+  .brand-txt small {
+    font-size: 0.68rem;
+  }
+  .status-wrap {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .status-txt {
+    max-width: 60vw;
+  }
+  .usage {
+    order: 3;
+    width: 100%;
+  }
+
+  /* tab 紧凑一点 */
+  .tabs {
+    padding: 6px 6px 0;
+  }
+  .tab {
+    padding: 9px 11px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  .t-label {
+    font-size: 0.98rem;
   }
 }
 </style>

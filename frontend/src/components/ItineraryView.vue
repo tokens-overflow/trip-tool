@@ -287,4 +287,9 @@ function dur(min?: number): string {
   color: var(--text-mid);
   line-height: 1.5;
 }
+
+@media (max-width: 760px) {
+  .itin { height: auto; }
+  .days { overflow: visible; }
+}
 </style>

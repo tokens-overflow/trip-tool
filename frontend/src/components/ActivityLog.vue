@@ -137,4 +137,9 @@ function summarize(req: Record<string, unknown>): string {
 .err {
   color: var(--err);
 }
+
+@media (max-width: 760px) {
+  .log { height: auto; }
+  .rows { overflow: visible; }
+}
 </style>
