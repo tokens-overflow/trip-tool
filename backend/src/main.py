@@ -122,7 +122,6 @@ def create_app() -> FastAPI:
             run_id=state.run_id,
             report_markdown=state.report_markdown,
             itinerary=state.itinerary,
-            map_overview=state.map_overview,
             tasks=state.tasks,
         )
 

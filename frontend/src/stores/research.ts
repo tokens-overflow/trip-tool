@@ -5,13 +5,7 @@
  */
 
 import { computed, reactive } from "vue";
-import type {
-  ItineraryDay,
-  MapOverview,
-  Place,
-  ServerEvent,
-  TaskNode,
-} from "../types/events";
+import type { ItineraryDay, Place, ServerEvent, TaskNode } from "../types/events";
 import { loadHistory, saveSnapshot, type RunSnapshot } from "../services/history";
 
 export interface UsageState {
@@ -44,7 +38,6 @@ export interface RunState {
   tasks: TaskNode[];
   reportMarkdown: string;
   itinerary: ItineraryDay[];
-  mapOverview: MapOverview;
   usage: UsageState | null;
   error: string | null;
   activity: ActivityEntry[];
@@ -61,7 +54,6 @@ function emptyState(): RunState {
     tasks: [],
     reportMarkdown: "",
     itinerary: [],
-    mapOverview: {},
     usage: null,
     error: null,
     activity: [],
@@ -204,7 +196,6 @@ export function handleEvent(event: ServerEvent) {
     case "report":
       researchState.reportMarkdown = event.markdown;
       researchState.itinerary = event.itinerary;
-      researchState.mapOverview = event.map_overview;
       researchState.statusMessage =
         researchState.language === "zh" ? "报告已生成" : "Report ready";
       break;
@@ -243,7 +234,6 @@ function persistRun() {
     tasks: JSON.parse(JSON.stringify(researchState.tasks)),
     reportMarkdown: researchState.reportMarkdown,
     itinerary: researchState.itinerary,
-    mapOverview: researchState.mapOverview,
     usage: researchState.usage,
   };
   saveSnapshot(snap);
@@ -259,7 +249,6 @@ export function restoreSnapshot(snap: RunSnapshot) {
   researchState.tasks = snap.tasks;
   researchState.reportMarkdown = snap.reportMarkdown;
   researchState.itinerary = snap.itinerary;
-  researchState.mapOverview = snap.mapOverview;
   researchState.usage = snap.usage;
   researchState.statusMessage =
     snap.language === "zh" ? "已载入历史记录" : "Loaded from history";

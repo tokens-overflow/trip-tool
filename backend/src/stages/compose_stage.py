@@ -12,7 +12,7 @@ from ..llm_tasks.itinerary_task import (
     ItineraryInput,
     ItineraryTask,
     _evidence_for_itinerary,
-    _map_overview,
+    center_of,
 )
 from ..llm_tasks.report_task import ReportInput, ReportTask
 from ..models import ReportEvent, ResearchState, StatusEvent, UsageEvent, UsageSnapshot
@@ -34,8 +34,7 @@ def _trip_context(state: ResearchState) -> str:
 async def _weather_for_state(state: ResearchState) -> str:
     """取所有地点的几何中心作为锚点，拉一段近期天气预报（失败返回空串）。"""
     _text, places = _evidence_for_itinerary(state.tasks)
-    overview = _map_overview(places)
-    center = overview.get("center") if overview else None
+    center = center_of(places)
     if not center:
         return ""
     return await fetch_weather(center["lat"], center["lng"])
@@ -73,7 +72,7 @@ class ComposeStage:
             trip_context=trip_context,
         ))
         itinerary_coro = self._safe_itinerary(state, weather, trip_context)
-        state.report_markdown, (state.itinerary, state.map_overview) = await asyncio.gather(
+        state.report_markdown, state.itinerary = await asyncio.gather(
             report_coro, itinerary_coro
         )
         state.finished_at = time.time()
@@ -82,7 +81,6 @@ class ComposeStage:
         emit(ReportEvent(
             markdown=state.report_markdown,
             itinerary=state.itinerary,
-            map_overview=state.map_overview,
         ))
 
         snap = self._usage_snapshot()
@@ -96,7 +94,7 @@ class ComposeStage:
     async def _safe_itinerary(self, state: ResearchState, weather: str, trip_context: str):
         """Itinerary 走 JSON 模式，LLM 偶尔会返回非法 JSON。
 
-        失败时不能拖垮整份报告 —— 兜底成空 days + 仅从证据算出的地图概览。
+        失败时不能拖垮整份报告 —— 兜底成空 days。
         """
         try:
             return await self._itinerary.run(ItineraryInput(
@@ -107,5 +105,4 @@ class ComposeStage:
             ))
         except Exception:
             logger.exception("行程生成失败，使用空 days 兜底")
-            _, places = _evidence_for_itinerary(state.tasks)
-            return [], _map_overview(places)
+            return []

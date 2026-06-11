@@ -3,7 +3,7 @@
  * Stores a compact snapshot per completed run so users can revisit / restore.
  */
 
-import type { ItineraryDay, MapOverview, TaskNode } from "../types/events";
+import type { ItineraryDay, TaskNode } from "../types/events";
 
 const KEY = "cartograph.history.v1";
 const MAX = 20;
@@ -17,7 +17,6 @@ export interface RunSnapshot {
   tasks: TaskNode[];
   reportMarkdown: string;
   itinerary: ItineraryDay[];
-  mapOverview: MapOverview;
   usage: {
     llm_prompt_tokens: number;
     llm_completion_tokens: number;

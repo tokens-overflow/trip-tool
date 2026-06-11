@@ -92,7 +92,7 @@ class ResearchState(BaseModel):
     字段按 stage 顺序填入：
         PlanStage      → tasks
         ExecuteStage   → tasks[*].evidence / summary / status
-        ComposeStage   → report_markdown / itinerary / map_overview / finished_at
+        ComposeStage   → report_markdown / itinerary / finished_at
     """
 
     run_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -109,7 +109,6 @@ class ResearchState(BaseModel):
     tasks: list[TaskNode] = Field(default_factory=list)
     report_markdown: str = ""
     itinerary: list[dict[str, Any]] = Field(default_factory=list)
-    map_overview: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -170,12 +169,11 @@ class ToolResultEvent(BaseEvent):
 
 
 class ReportEvent(BaseEvent):
-    """最终报告就绪。包含 markdown / 行程 / 地图概览三件套。"""
+    """最终报告就绪。包含 markdown / 行程。"""
 
     type: Literal["report"] = "report"
     markdown: str
     itinerary: list[dict[str, Any]] = Field(default_factory=list)
-    map_overview: dict[str, Any] = Field(default_factory=dict)
 
 
 class UsageEvent(BaseEvent):
@@ -238,7 +236,6 @@ class ResearchResponse(BaseModel):
     run_id: str
     report_markdown: str
     itinerary: list[dict[str, Any]] = Field(default_factory=list)
-    map_overview: dict[str, Any] = Field(default_factory=dict)
     tasks: list[TaskNode]
 
 

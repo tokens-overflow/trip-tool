@@ -66,7 +66,6 @@ if (-not (Test-Path $envLocal)) {
     if (Test-Path $envEx) {
         Copy-Item $envEx $envLocal
         Write-Host "  ✓ 已从 .env.local.example 创建 frontend/.env.local" -ForegroundColor Yellow
-        Write-Host "    ★ 记得编辑里面的 VITE_GOOGLE_MAPS_JS_KEY" -ForegroundColor Yellow
     } else {
         Write-Host "  ✗ frontend/.env.local.example 也不存在，无法兜底" -ForegroundColor Red
         exit 1
@@ -147,12 +146,6 @@ try {
         Write-Host "    打开 backend/config.yaml，把 app.maps.api_key 填上你的 Server key" -ForegroundColor Yellow
     }
 } finally { Pop-Location }
-
-$envContent = Get-Content $envLocal -Raw
-if ($envContent -match "your-browser-maps-key" -or $envContent -notmatch "VITE_GOOGLE_MAPS_JS_KEY=\s*AIza") {
-    Write-Host "  ⚠ frontend/.env.local 里 VITE_GOOGLE_MAPS_JS_KEY 还是占位值。" -ForegroundColor Yellow
-    Write-Host "    打开 frontend/.env.local，把 key 填上你的 Browser key" -ForegroundColor Yellow
-}
 
 # ------------------------------------------------------------
 Write-Host ""

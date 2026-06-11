@@ -58,21 +58,6 @@ export interface TaskNode {
   error: string | null;
 }
 
-export interface MapMarker {
-  place_id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  rating: number | null;
-  url: string | null;
-}
-
-export interface MapOverview {
-  center?: { lat: number; lng: number };
-  bounds?: { south: number; north: number; west: number; east: number };
-  markers?: MapMarker[];
-}
-
 export type ServerEvent =
   | { type: "status"; timestamp: number; message: string; task_id?: number | null }
   | { type: "plan_ready"; timestamp: number; run_id: string; tasks: TaskNode[] }
@@ -114,7 +99,6 @@ export type ServerEvent =
       timestamp: number;
       markdown: string;
       itinerary: ItineraryDay[];
-      map_overview: MapOverview;
     }
   | {
       type: "usage";

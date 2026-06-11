@@ -1,8 +1,4 @@
-"""LLM 用例：地点证据 → 结构化 JSON 行程 + 地图概览。
-
-地图概览（center / bounds / markers）是**确定性的纯几何计算**，不依赖 LLM；
-LLM 仅负责把地点编排进多日时间段（days / slots）。
-"""
+"""LLM 用例：地点证据 → 结构化 JSON 多日行程。"""
 
 from __future__ import annotations
 
@@ -24,12 +20,12 @@ class ItineraryInput(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
-# 返回值：(每日行程数组, 地图概览 dict)
-ItineraryResult = tuple[list[dict[str, Any]], dict[str, Any]]
+# 返回值：每日行程数组
+ItineraryResult = list[dict[str, Any]]
 
 
 class ItineraryTask(JsonLLMTask[ItineraryInput, ItineraryResult]):
-    """生成多日行程 + 地图概览。LLM 失败时由 ComposeStage 兜底为空行程。"""
+    """生成多日行程。LLM 失败时由 ComposeStage 兜底为空行程。"""
 
     def build_messages(self, input: ItineraryInput) -> list[dict[str, str]]:
         evidence_text, _places = _evidence_for_itinerary(input.tasks)
@@ -41,13 +37,11 @@ class ItineraryTask(JsonLLMTask[ItineraryInput, ItineraryResult]):
         )
 
     def parse(self, raw: Any, input: ItineraryInput) -> ItineraryResult:
-        days = _extract_days(raw)
-        _evidence_text, places = _evidence_for_itinerary(input.tasks)
-        return days, _map_overview(places)
+        return _extract_days(raw)
 
 
 # ---------------------------------------------------------------------------
-# 辅助函数 —— 纯几何 / 字符串处理，不调 LLM
+# 辅助函数 —— 纯字符串 / 几何处理，不调 LLM
 # ---------------------------------------------------------------------------
 def _evidence_for_itinerary(tasks: list[TaskNode]) -> tuple[str, list[Place]]:
     """按 place_id 去重所有任务证据中的地点，并格式化成 Prompt 用的文本。"""
@@ -71,6 +65,15 @@ def _evidence_for_itinerary(tasks: list[TaskNode]) -> tuple[str, list[Place]]:
     return "\n".join(lines) or "（无地点）", places
 
 
+def center_of(places: list[Place]) -> dict[str, float] | None:
+    """所有地点经纬度的几何中心，用作天气查询的锚点（无有效坐标返回 None）。"""
+    lats = [p.lat for p in places if p.lat]
+    lngs = [p.lng for p in places if p.lng]
+    if not lats or not lngs:
+        return None
+    return {"lat": sum(lats) / len(lats), "lng": sum(lngs) / len(lngs)}
+
+
 def _extract_days(raw: Any) -> list[dict[str, Any]]:
     """容忍 LLM 返回 ``[...]`` 或 ``{"days": [...]}`` / ``{"itinerary": [...]}`` 等包装。"""
     if isinstance(raw, list):
@@ -81,33 +84,3 @@ def _extract_days(raw: Any) -> list[dict[str, Any]]:
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
     return []
-
-
-def _map_overview(places: list[Place]) -> dict[str, Any]:
-    """根据所有 place 算出地图中心、外接矩形、marker 列表。纯几何，不调 LLM。"""
-    if not places:
-        return {}
-    lats = [p.lat for p in places if p.lat]
-    lngs = [p.lng for p in places if p.lng]
-    if not lats or not lngs:
-        return {}
-    return {
-        "center": {"lat": sum(lats) / len(lats), "lng": sum(lngs) / len(lngs)},
-        "bounds": {
-            "south": min(lats),
-            "north": max(lats),
-            "west":  min(lngs),
-            "east":  max(lngs),
-        },
-        "markers": [
-            {
-                "place_id": p.place_id,
-                "name":     p.name,
-                "lat":      p.lat,
-                "lng":      p.lng,
-                "rating":   p.rating,
-                "url":      p.google_maps_url,
-            }
-            for p in places
-        ],
-    }
