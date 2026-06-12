@@ -28,7 +28,7 @@ class ItineraryTask(JsonLLMTask[ItineraryInput, ItineraryResult]):
     """生成多日行程。LLM 失败时由 ComposeStage 兜底为空行程。"""
 
     def build_messages(self, input: ItineraryInput) -> list[dict[str, str]]:
-        evidence_text, _places = _evidence_for_itinerary(input.tasks)
+        evidence_text, _places = evidence_for_itinerary(input.tasks)
         return itinerary_messages(
             topic=input.topic,
             evidence_block=evidence_text,
@@ -42,8 +42,9 @@ class ItineraryTask(JsonLLMTask[ItineraryInput, ItineraryResult]):
 
 # ---------------------------------------------------------------------------
 # 辅助函数 —— 纯字符串 / 几何处理，不调 LLM
+# （公开导出：ComposeStage 也用它取去重后的地点列表来定位天气锚点）
 # ---------------------------------------------------------------------------
-def _evidence_for_itinerary(tasks: list[TaskNode]) -> tuple[str, list[Place]]:
+def evidence_for_itinerary(tasks: list[TaskNode]) -> tuple[str, list[Place]]:
     """按 place_id 去重所有任务证据中的地点，并格式化成 Prompt 用的文本。"""
     seen: set[str] = set()
     places: list[Place] = []
@@ -75,12 +76,16 @@ def center_of(places: list[Place]) -> dict[str, float] | None:
 
 
 def _extract_days(raw: Any) -> list[dict[str, Any]]:
-    """容忍 LLM 返回 ``[...]`` 或 ``{"days": [...]}`` / ``{"itinerary": [...]}`` 等包装。"""
-    if isinstance(raw, list):
-        return [item for item in raw if isinstance(item, dict) and "slots" in item]
+    """容忍 LLM 返回 ``[...]`` 或 ``{"days": [...]}`` / ``{"itinerary": [...]}`` 等包装。
+
+    只保留带 ``slots`` 字段的 dict —— 没有 slots 的"天"前端渲染不了。
+    """
     if isinstance(raw, dict):
         for key in ("days", "itinerary", "schedule"):
             value = raw.get(key)
             if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
+                raw = value
+                break
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict) and "slots" in item]
     return []

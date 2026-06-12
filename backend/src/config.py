@@ -170,7 +170,7 @@ class Configuration(BaseModel):
 
     # ------------------------------------------------------------------
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "Configuration":
+    def from_yaml(cls, path: str | Path) -> Configuration:
         p = Path(path)
         if not p.is_absolute():
             p = Path.cwd() / p

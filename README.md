@@ -77,7 +77,7 @@ backend/src/
 │   ├─ plan_task.py        JsonLLMTask[PlanInput, list[TaskNode]]
 │   ├─ summarize_task.py   StreamingLLMTask[SummarizeInput, str]
 │   ├─ report_task.py      TextLLMTask[ReportInput, str]
-│   └─ itinerary_task.py   JsonLLMTask[ItineraryInput, (days, overview)]
+│   └─ itinerary_task.py   JsonLLMTask[ItineraryInput, list[day]]（每日行程数组）
 │
 ├─ 🎬 stages/              ── 3 个 Pipeline Stage（唯一混合 LLM+tool+event）
 │   ├─ plan_stage.py
@@ -186,7 +186,7 @@ llm:
 app:
   maps:
     api_key: AIzaSy...       # ★必填：后端 Server key
-    default_places_limit: 20 # 候选数量等可按需调整
+    default_places_limit: 8  # 每次搜索的候选数量，默认 8，最大 20
   # 其余字段（端口、并发、缓存、retry…）有默认值
 ```
 
@@ -223,7 +223,7 @@ npm install
 # 终端 A：后端
 cd backend
 python -m src.main
-# → INFO Uvicorn running on http://127.0.0.1:8000
+# → INFO Uvicorn running on http://0.0.0.0:8000（默认监听 0.0.0.0，局域网可访问）
 ```
 
 ```bash
@@ -239,7 +239,14 @@ npm run dev
 
 > Windows 用户可用 `start.bat` / `start.ps1` 一键起双端并自动开浏览器。
 
-### 健康检查 / 切换 provider
+### 后端 HTTP 接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/research/stream` | SSE 流式研究（前端用的就是它）；body 为 `{topic, language?, max_tasks?, location_hint?, budget?, travel_date?}` |
+| POST | `/research` | 同步版：跑完整条 Pipeline 后一次性返回报告 + 行程 + 任务 |
+| GET | `/healthz` | 健康检查，返回当前 provider / model / 配置路径 |
+| GET | `/usage` | 进程累计用量：LLM tokens、Maps 调用次数、缓存命中数 |
 
 ```bash
 curl http://localhost:8000/healthz

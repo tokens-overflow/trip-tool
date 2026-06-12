@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 from tenacity import (
@@ -156,7 +157,6 @@ class GoogleMapsClient:
         self,
         query: str,
         *,
-        location_bias: dict[str, Any] | None = None,
         max_result_count: int | None = None,
         open_now: bool | None = None,
         language_code: str | None = None,
@@ -166,8 +166,6 @@ class GoogleMapsClient:
             "maxResultCount": max_result_count or self._app.maps.default_places_limit,
             "languageCode": language_code or self._app.maps.default_language_code,
         }
-        if location_bias:
-            body["locationBias"] = location_bias
         if open_now is True:
             body["openNow"] = True
         return await self._post(PLACES_TEXT_SEARCH_URL, body, tool="places.text",

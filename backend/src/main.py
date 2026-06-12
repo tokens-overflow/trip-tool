@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -104,14 +104,7 @@ def create_app() -> FastAPI:
     async def run_research(payload: ResearchRequest) -> ResearchResponse:
         try:
             agent = _get_agent()
-            state = await agent.run(
-                topic=payload.topic,
-                language=payload.language,
-                max_tasks=payload.max_tasks,
-                location_hint=payload.location_hint,
-                budget=payload.budget,
-                travel_date=payload.travel_date,
-            )
+            state = await agent.run(payload)
         except RuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:  # pragma: no cover - 防御性兜底
@@ -134,14 +127,7 @@ def create_app() -> FastAPI:
 
         async def event_iter() -> AsyncIterator[str]:
             try:
-                async for event in agent.run_stream(
-                    topic=payload.topic,
-                    language=payload.language,
-                    max_tasks=payload.max_tasks,
-                    location_hint=payload.location_hint,
-                    budget=payload.budget,
-                    travel_date=payload.travel_date,
-                ):
+                async for event in agent.run_stream(payload):
                     body = event.model_dump_json()
                     yield f"event: {event.type}\ndata: {body}\n\n"
             except asyncio.CancelledError:  # pragma: no cover - 客户端断开

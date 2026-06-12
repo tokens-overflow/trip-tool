@@ -51,7 +51,7 @@ async def fetch_weather(lat: float, lng: float, days: int = 3) -> str:
     url = _WTTR.format(lat=round(lat, 4), lng=round(lng, 4))
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"User-Agent": "cartograph/1.0"})
+            resp = await client.get(url, headers={"User-Agent": "trip-tool/1.0"})
             resp.raise_for_status()
             data = resp.json()
     except Exception:  # pragma: no cover - 尽力而为

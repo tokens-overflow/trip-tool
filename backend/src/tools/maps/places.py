@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
@@ -82,8 +83,6 @@ def _quality_score(place: Place) -> float:
 
     无评分的地点给一个很低的分，排到最后但不丢弃。
     """
-    import math
-
     if place.rating is None:
         return -1.0
     reviews = place.user_ratings_total or 0
@@ -146,15 +145,16 @@ class PlacesTool(Tool):
                     language_code=language_code,
                 )
             else:
-                # 没有坐标 → 文本搜索；可选 location_hint 做偏置
+                # 没有坐标 → 文本搜索；location_hint（自由文本地名）直接并入
+                # 查询串 —— locationBias.circle.center 只接受经纬度对象，
+                # 文本锚点交给 Text Search 自己解析最可靠。
                 if not query:
                     return ToolResult(error="places 工具至少需要 query 或 lat/lng")
-                bias = None
-                if args.get("location_hint"):
-                    bias = {"circle": {"center": args["location_hint"], "radius": float(radius)}}
+                hint = str(args.get("location_hint") or "").strip()
+                if hint and hint not in query:
+                    query = f"{query} {hint}"
                 data, cached = await self._client.text_search_places(
                     query=query,
-                    location_bias=bias,
                     max_result_count=limit,
                     open_now=bool(open_now) if open_now is not None else None,
                     language_code=language_code,

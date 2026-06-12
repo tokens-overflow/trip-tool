@@ -62,7 +62,7 @@ app:
 
   # HTTP server / FastAPI
   server:
-    # 云端容器必须 0.0.0.0；本地默认 127.0.0.1
+    # 默认 0.0.0.0（容器 / 局域网真机可直接访问）；只想本机访问可设 HOST=127.0.0.1
     host: ${HOST:-0.0.0.0}
     port: ${PORT:-8000}
     cors_origins:

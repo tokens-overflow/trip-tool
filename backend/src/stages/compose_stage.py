@@ -5,14 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from ..core.events import EventEmitter
 from ..llm_tasks.itinerary_task import (
     ItineraryInput,
     ItineraryTask,
-    _evidence_for_itinerary,
     center_of,
+    evidence_for_itinerary,
 )
 from ..llm_tasks.report_task import ReportInput, ReportTask
 from ..models import ReportEvent, ResearchState, StatusEvent, UsageEvent, UsageSnapshot
@@ -33,7 +33,7 @@ def _trip_context(state: ResearchState) -> str:
 
 async def _weather_for_state(state: ResearchState) -> str:
     """取所有地点的几何中心作为锚点，拉一段近期天气预报（失败返回空串）。"""
-    _text, places = _evidence_for_itinerary(state.tasks)
+    _text, places = evidence_for_itinerary(state.tasks)
     center = center_of(places)
     if not center:
         return ""
