@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Awaitable, Callable, Generic, Protocol, TypeVar, runtime_checkable
+from collections.abc import Awaitable, Callable
+from typing import Generic, Protocol, TypeVar, runtime_checkable
 
 logger = logging.getLogger(__name__)
 

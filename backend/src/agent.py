@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from .config import Configuration
 from .core.events import noop_emitter
@@ -31,6 +31,7 @@ from .models import (
     DoneEvent,
     ErrorEvent,
     Event,
+    ResearchRequest,
     ResearchState,
     TaskNode,
     UsageSnapshot,
@@ -105,41 +106,19 @@ class MapsDeepResearchAgent:
         await self._maps_client.aclose()
 
     # ------------------------------------------------------------------ 对外 API
-    async def run(
-        self,
-        topic: str,
-        *,
-        language: str | None = None,
-        max_tasks: int | None = None,
-        location_hint: str | None = None,
-        budget: str | None = None,
-        travel_date: str | None = None,
-    ) -> ResearchState:
+    async def run(self, request: ResearchRequest) -> ResearchState:
         """同步端到端：事件全部丢弃，返回最终 state。"""
-        state = self._make_state(
-            topic, language, max_tasks, location_hint, budget, travel_date
-        )
+        state = self._make_state(request)
         await self._pipeline.execute(state, noop_emitter)
         return state
 
-    async def run_stream(
-        self,
-        topic: str,
-        *,
-        language: str | None = None,
-        max_tasks: int | None = None,
-        location_hint: str | None = None,
-        budget: str | None = None,
-        travel_date: str | None = None,
-    ) -> AsyncIterator[Event]:
+    async def run_stream(self, request: ResearchRequest) -> AsyncIterator[Event]:
         """流式：把每个事件按发生顺序 yield 出来（FastAPI 侧推到 SSE）。
 
         模式：一个 producer 协程把事件塞进 asyncio.Queue，本生成器从队列消费
         并 yield，遇到 ``None`` sentinel 表示流结束。
         """
-        state = self._make_state(
-            topic, language, max_tasks, location_hint, budget, travel_date
-        )
+        state = self._make_state(request)
         queue: asyncio.Queue[Event | None] = asyncio.Queue()
 
         async def producer() -> None:
@@ -163,20 +142,12 @@ class MapsDeepResearchAgent:
             await producer_task
 
     # ------------------------------------------------------------------ 内部
-    def _make_state(
-        self,
-        topic: str,
-        language: str | None,
-        max_tasks: int | None,
-        location_hint: str | None,
-        budget: str | None = None,
-        travel_date: str | None = None,
-    ) -> ResearchState:
+    def _make_state(self, request: ResearchRequest) -> ResearchState:
         return ResearchState(
-            topic=topic,
-            language=language or self._config.app.agent.default_language,  # type: ignore[arg-type]
-            location_hint=location_hint,
-            requested_max_tasks=max_tasks,
-            budget=budget,
-            travel_date=travel_date,
+            topic=request.topic,
+            language=request.language or self._config.app.agent.default_language,
+            location_hint=request.location_hint,
+            requested_max_tasks=request.max_tasks,
+            budget=request.budget,
+            travel_date=request.travel_date,
         )

@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Iterable, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 @dataclass

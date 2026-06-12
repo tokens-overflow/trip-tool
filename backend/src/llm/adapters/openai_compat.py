@@ -1,12 +1,13 @@
 """OpenAI 兼容协议 adapter —— 同时支持 OpenAI 和 DeepSeek。
 
 DeepSeek pro 系列模型默认自动开启 reasoning/thinking 参数；
-若需关闭，可在 LLMConfig.yaml 中显式写 ``reasoning_effort: ""``。
+若需关闭，可在 config.yaml 的 provider 节显式写 ``reasoning_effort: ""``。
 """
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable
+from typing import Any
 
 from openai import APIError, AsyncOpenAI, RateLimitError
 from tenacity import (

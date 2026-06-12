@@ -14,10 +14,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
 
 TaskStatus = Literal["pending", "in_progress", "completed", "skipped", "failed"]
 
@@ -220,14 +219,14 @@ class ResearchRequest(BaseModel):
     topic: str = Field(min_length=2, max_length=500)
     max_tasks: int | None = Field(default=None, ge=1, le=10)
     language: Literal["zh", "en"] | None = None
-    location_hint: Optional[str] = Field(
+    location_hint: str | None = Field(
         default=None,
         description="可选的位置锚点，例如 'Tokyo, Japan'，作为 Maps 查询的先验偏置",
     )
-    budget: Optional[str] = Field(
+    budget: str | None = Field(
         default=None, max_length=120, description="可选预算，如 '人均 500 元' / '总预算 5000'"
     )
-    travel_date: Optional[str] = Field(
+    travel_date: str | None = Field(
         default=None, max_length=120, description="可选出行日期/时间，如 '2026-06-20' / '6 月下旬周末'"
     )
 

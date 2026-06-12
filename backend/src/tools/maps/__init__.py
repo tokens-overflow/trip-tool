@@ -17,11 +17,11 @@ from .geocoding import GeocodingTool
 from .places import PlacesTool
 
 __all__ = [
+    "DirectionsTool",
+    "DistanceMatrixTool",
+    "GeocodingTool",
     "GoogleMapsClient",
     "PlacesTool",
-    "DirectionsTool",
-    "GeocodingTool",
-    "DistanceMatrixTool",
     "register_default_maps_tools",
 ]
 
